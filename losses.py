@@ -82,7 +82,15 @@ def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_we
     """
     score_fn = mutils.get_score_fn(sde, model, train=train, continuous=continuous)
     t = torch.rand(batch.shape[0], device=batch.device) * (sde.T - eps) + eps
-    z = torch.randn_like(batch)
+    # z = torch.randn_like(batch)
+    #################################################################
+    # 使用伽马分布 Gamma(a^2, a) 其中 a=10000，并减去均值 a
+    a = 10000
+    gamma_dist = torch.distributions.gamma.Gamma(a ** 2, a)
+    # 生成伽马分布随机数并减去均值 a
+    z = (gamma_dist.sample(batch.shape).to(batch.device) - a)
+    #################################################################
+
     mean, std = sde.marginal_prob(batch, t)
     perturbed_data = mean + std[:, None, None, None] * z
     score = score_fn(perturbed_data, t)
@@ -113,7 +121,16 @@ def get_smld_loss_fn(vesde, train, reduce_mean=False):
     model_fn = mutils.get_model_fn(model, train=train)
     labels = torch.randint(0, vesde.N, (batch.shape[0],), device=batch.device)
     sigmas = smld_sigma_array.to(batch.device)[labels]
-    noise = torch.randn_like(batch) * sigmas[:, None, None, None]
+    # noise = torch.randn_like(batch) * sigmas[:, None, None, None]
+    #################################################################
+    # 使用伽马分布 Gamma(a^2, a) 其中 a=10000，并减去均值 a
+    a = 10000
+    gamma_dist = torch.distributions.gamma.Gamma(a ** 2, a)
+    # 生成伽马分布随机数并减去均值 a
+    noise = (gamma_dist.sample(batch.shape).to(batch.device) - a) * sigmas[:, None, None, None]
+    #################################################################
+
+
     perturbed_data = noise + batch
     score = model_fn(perturbed_data, labels)
     target = -noise / (sigmas ** 2)[:, None, None, None]
@@ -136,7 +153,14 @@ def get_ddpm_loss_fn(vpsde, train, reduce_mean=True):
     labels = torch.randint(0, vpsde.N, (batch.shape[0],), device=batch.device)
     sqrt_alphas_cumprod = vpsde.sqrt_alphas_cumprod.to(batch.device)
     sqrt_1m_alphas_cumprod = vpsde.sqrt_1m_alphas_cumprod.to(batch.device)
-    noise = torch.randn_like(batch)
+    # noise = torch.randn_like(batch)
+    #################################################################
+    # 使用伽马分布 Gamma(a^2, a) 其中 a=10000，并减去均值 a
+    a = 10000
+    gamma_dist = torch.distributions.gamma.Gamma(a ** 2, a)
+    # 生成伽马分布随机数并减去均值 a
+    noise = (gamma_dist.sample(batch.shape).to(batch.device) - a)
+    #################################################################
     perturbed_data = sqrt_alphas_cumprod[labels, None, None, None] * batch + \
                      sqrt_1m_alphas_cumprod[labels, None, None, None] * noise
     score = model_fn(perturbed_data, labels)
