@@ -1,9 +1,5 @@
 ml-collections
-tensorflow-gan
 tensorflow_datasets
-tensorflow
-tensorboard
-absl-py
-torch
-torchvision
 ninja
+scipy
+jax
