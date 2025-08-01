@@ -331,7 +331,7 @@ class VESDE(SDE):
     sigma = self.discrete_sigmas.to(t.device)[timestep]
     adjacent_sigma = torch.where(timestep == 0, torch.zeros_like(t),
                                  self.discrete_sigmas.to(t.device)[timestep - 1].to(t.device))
-    f = torch.zeros_like(x) + sigma * (-1) * (self.c / self.lam)
+    f = torch.zeros_like(x) + sigma[:,None,None,None] * (-1) * (self.c / self.lam)
     G = 1 / self.lam
     return f, G
 
