@@ -83,20 +83,27 @@ def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_we
     score_fn = mutils.get_score_fn(sde, model, train=train, continuous=continuous)
     t = torch.rand(batch.shape[0], device=batch.device) * (sde.T - eps) + eps
     # z = torch.randn_like(batch)
-    #################################################################
-    # 使用伽马分布 Gamma(a^2, a) 其中 a=10000，并减去均值 a
-    a = 10000
-    gamma_dist = torch.distributions.gamma.Gamma(a ** 2, a)
-    # 生成伽马分布随机数并减去均值 a
-    z = (gamma_dist.sample(batch.shape).to(batch.device) - a)
-    #################################################################
+    # #################################################################
+    # # 使用伽马分布 Gamma(a^2, a) 其中 a=10000，并减去均值 a
+    lam = 1000
+    c = lam ** 2
+    # e_g = sigmas * c / lam
+    # gamma_dist = torch.distributions.gamma.Gamma(sigmas * c, lam)
+    #
+    # # 生成伽马分布随机数并减去均值 a
+    # z = (gamma_dist.sample(batch.shape).to(batch.device) - e_g) * sigmas[:, None, None, None]
+    # #################################################################
 
     mean, std = sde.marginal_prob(batch, t)
-    perturbed_data = mean + std[:, None, None, None] * z
+    # perturbed_data = mean + std[:, None, None, None] * z
+    perturbed_data = batch + torch.distributions.gamma.Gamma(mean, std).sample(batch.shape).to(batch.device) - (mean/std)
+
     score = score_fn(perturbed_data, t)
 
     if not likelihood_weighting:
-      losses = torch.square(score * std[:, None, None, None] + z)
+      # losses = torch.square(score * std[:, None, None, None] + z)
+      target = ((-1) * lam * (1 + lam * noise)) / (lam * noise + c * sigmas)[:, None, None, None]
+      losses = torch.square(score - target)
       losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)
     else:
       g2 = sde.sde(torch.zeros_like(batch), t)[1] ** 2
@@ -122,18 +129,27 @@ def get_smld_loss_fn(vesde, train, reduce_mean=False):
     labels = torch.randint(0, vesde.N, (batch.shape[0],), device=batch.device)
     sigmas = smld_sigma_array.to(batch.device)[labels]
     # noise = torch.randn_like(batch) * sigmas[:, None, None, None]
-    #################################################################
-    # 使用伽马分布 Gamma(a^2, a) 其中 a=10000，并减去均值 a
-    a = 10000
-    gamma_dist = torch.distributions.gamma.Gamma(a ** 2, a)
-    # 生成伽马分布随机数并减去均值 a
-    noise = (gamma_dist.sample(batch.shape).to(batch.device) - a) * sigmas[:, None, None, None]
-    #################################################################
+    # #################################################################
+    # # 使用伽马分布 Gamma(a^2, a) 其中 a=10000，并减去均值 a
+    lam = 1000
+    c = lam ** 2
+    # e_g = sigmas * c / lam
+    # gamma_dist = torch.distributions.gamma.Gamma(sigmas * c , lam)
+    #
+    # # 生成伽马分布随机数并减去均值 a
+    # noise = (gamma_dist.sample(batch.shape).to(batch.device) - e_g) * sigmas[:, None, None, None]
+    # #################################################################
 
 
-    perturbed_data = noise + batch
+    # perturbed_data = noise + batch
+
+    mean, std = sde.marginal_prob(batch, t)
+    perturbed_data = batch + torch.distributions.gamma.Gamma(mean, std).sample(batch.shape).to(batch.device) - (mean/std)
+
+
     score = model_fn(perturbed_data, labels)
-    target = -noise / (sigmas ** 2)[:, None, None, None]
+    # target = -noise / (sigmas ** 2)[:, None, None, None]
+    target = ((-1) * lam * (1+lam * noise)) / (lam * noise + c * sigmas)[:, None, None, None]
     losses = torch.square(score - target)
     losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1) * sigmas ** 2
     loss = torch.mean(losses)

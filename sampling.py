@@ -307,7 +307,8 @@ class AnnealedLangevinDynamics(Corrector):
     else:
       alpha = torch.ones_like(t)
 
-    std = self.sde.marginal_prob(x, t)[1]
+    # std = self.sde.marginal_prob(x, t)[1]
+    std = self.sde.marginal_prob(x, t)[2]
 
     for i in range(n_steps):
       grad = score_fn(x, t)
