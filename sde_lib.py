@@ -72,7 +72,7 @@ class SDE(abc.ABC):
     sigma_max = 50
     sigma = sigma_min * (sigma_max / sigma_min) ** t
     c = 1000**2
-    G = diffusion * torch.distributions.Gamma(c * sigma * dt,1).sample(x.shape).to(x.device)
+    G = diffusion * torch.distributions.Gamma(c * sigma * dt,1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
 
     return f, G
 
@@ -290,7 +290,7 @@ class VESDE(SDE):
     sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
     # u_t
     # drift = torch.zeros_like(x)
-    drift = torch.zeros_like(x) + self.N * sigma * (-1) * (self.c / self.lam)
+    drift = torch.zeros_like(x) + self.N * sigma[:,None,None,None] * (-1) * (self.c / self.lam)
     #
     # diffusion = sigma * torch.sqrt(torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min)),
     #                                             device=t.device))
@@ -302,7 +302,14 @@ class VESDE(SDE):
     # q(t)
     # std = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
     # mean = x
-    mean =  self.c * torch.sum(self.discrete_sigmas[:t])
+    sum_sig = torch.cumprod()
+
+    # mean =  self.c * torch.sum(self.discrete_sigmas[:t])
+
+    sigmas_cumprod = torch.cumprod(self.discrete_sigmas, dim=0)  # shape=[num_timesteps]
+    sigmas_cumprod = sigmas_cumprod.to(t.device)  # 确保同设备
+    mean = self.c * sigmas_cumprod[t.long()]
+
     std = self.lam
 
     std2 = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
@@ -324,7 +331,7 @@ class VESDE(SDE):
     timestep = (t * (self.N - 1) / self.T).long()
     sigma = self.discrete_sigmas.to(t.device)[timestep]
     adjacent_sigma = torch.where(timestep == 0, torch.zeros_like(t),
-                                 self.discrete_sigmas[timestep - 1].to(t.device))
+                                 self.discrete_sigmas.to(t.device)[timestep - 1].to(t.device))
     f = torch.zeros_like(x) + sigma * (-1) * (self.c / self.lam)
     G = 1 / self.lam
     return f, G
@@ -348,6 +355,8 @@ class VESDE(SDE):
       def __init__(self):
         self.N = N
         self.probability_flow = probability_flow
+        self.lam = 1000
+        self.c = self.lam ** 2
 
       @property
       def T(self):
@@ -358,7 +367,7 @@ class VESDE(SDE):
         # 反向连续sde
         """Create the drift and diffusion functions for the reverse SDE/ODE."""
         drift, diffusion = sde_fn(x, t)
-        score = score_fn(x, t)
+        # score = score_fn(x, t)
         # drift = drift - diffusion[:, None, None, None] ** 2 * score * (0.5 if self.probability_flow else 1.)
         drift = drift
         # Set the diffusion function to zero for ODEs.

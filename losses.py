@@ -94,15 +94,22 @@ def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_we
     # z = (gamma_dist.sample(batch.shape).to(batch.device) - e_g) * sigmas[:, None, None, None]
     # #################################################################
 
-    mean, std = sde.marginal_prob(batch, t)
+    mean, std, _ = sde.marginal_prob(batch, t)
     # perturbed_data = mean + std[:, None, None, None] * z
-    perturbed_data = batch + torch.distributions.gamma.Gamma(mean, std).sample(batch.shape).to(batch.device) - (mean/std)
+    # perturbed_data = batch + torch.distributions.gamma.Gamma(mean, std).sample(batch.shape).to(batch.device) - (mean/std)
+
+    noise = torch.distributions.gamma.Gamma(mean, std).sample(batch.shape[1:]).permute(-1,0,1,2).to(batch.device) - (mean/std)[:,None,None,None]
+    perturbed_data = batch + noise
 
     score = score_fn(perturbed_data, t)
 
     if not likelihood_weighting:
       # losses = torch.square(score * std[:, None, None, None] + z)
-      target = ((-1) * lam * (1 + lam * noise)) / (lam * noise + c * sigmas)[:, None, None, None]
+      smld_sigma_array = torch.flip(sde.discrete_sigmas, dims=(0,))
+      sigmas = smld_sigma_array.to(batch.device)[t.long()]
+
+
+      target = ((-1) * lam * (1 + lam * noise)) / (lam * noise + c * sigmas[:,None,None,None])
       losses = torch.square(score - target)
       losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)
     else:
@@ -143,13 +150,14 @@ def get_smld_loss_fn(vesde, train, reduce_mean=False):
 
     # perturbed_data = noise + batch
 
-    mean, std = sde.marginal_prob(batch, t)
-    perturbed_data = batch + torch.distributions.gamma.Gamma(mean, std).sample(batch.shape).to(batch.device) - (mean/std)
+    mean, std, _ = sde.marginal_prob(batch, t)
 
+    noise = torch.distributions.gamma.Gamma(mean, std).sample(batch.shape[1:]).permute(-1,0,1,2).to(batch.device) - (mean/std)[:,None,None,None]
+    perturbed_data = batch + noise
 
     score = model_fn(perturbed_data, labels)
     # target = -noise / (sigmas ** 2)[:, None, None, None]
-    target = ((-1) * lam * (1+lam * noise)) / (lam * noise + c * sigmas)[:, None, None, None]
+    target = ((-1) * lam * (1+lam * noise)) / (lam * noise + c * sigmas[:,None,None,None])
     losses = torch.square(score - target)
     losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1) * sigmas ** 2
     loss = torch.mean(losses)
