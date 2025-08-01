@@ -302,7 +302,6 @@ class VESDE(SDE):
     # q(t)
     # std = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
     # mean = x
-    sum_sig = torch.cumprod()
 
     # mean =  self.c * torch.sum(self.discrete_sigmas[:t])
 
