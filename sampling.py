@@ -211,13 +211,14 @@ class ReverseDiffusionPredictor(Predictor):
     # # print(f"G_shape:{G.shape}")
     # # print(f"dG_shape:{dG.shape}")
     # x = x_mean - dG
+    N = 1000
+    c = 1000**2
 
     sigma_min = 0.01
     sigma_max = 50
     discrete_sigmas = torch.exp(torch.linspace(np.log(sigma_min), np.log(sigma_max), N))
     alpha_t = discrete_sigmas.to(t.device)[t.long()]
 
-    N = 1000
     delta_t = 1/N
     delta_Ga = torch.distributions.Gamma(c * alpha_t , 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
 
