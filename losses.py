@@ -94,7 +94,7 @@ def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_we
     # z = (gamma_dist.sample(batch.shape).to(batch.device) - e_g) * sigmas[:, None, None, None]
     # #################################################################
 
-    shape_p, scale_p, _ = sde.marginal_prob(batch, t)
+    shape_p, scale_p, raw_std = sde.marginal_prob(batch, t)
     # perturbed_data = mean + std[:, None, None, None] * z
     # perturbed_data = batch + torch.distributions.gamma.Gamma(mean, std).sample(batch.shape).to(batch.device) - (mean/std)
 
@@ -108,7 +108,8 @@ def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_we
       smld_sigma_array = torch.flip(sde.discrete_sigmas, dims=(0,))
       alpha_t = smld_sigma_array.to(batch.device)[t.long()]
       target = ((-1) * lam * (1 + lam * noise)) / (lam * noise + c * alpha_t[:,None,None,None])
-      losses = torch.square(score - target)
+      # losses = torch.square(score - target)
+      losses = torch.square(raw_std[:, None, None, None] * (score - target))
       losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)
     else:
       g2 = sde.sde(torch.zeros_like(batch), t)[1] ** 2
