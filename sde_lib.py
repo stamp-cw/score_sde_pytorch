@@ -294,12 +294,20 @@ class VESDE(SDE):
 
     # alpha_t
 
-    alpha_t = sigma * torch.sqrt(torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min)),
-                                                device=t.device))
+    # alpha_t = sigma * torch.sqrt(torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min)),
+    #                                             device=t.device))
     # alpha_t = self.discrete_sigmas.to(t.device)[t.long()]
 
+    alpha_t = sigma ** 2
+
+    alpha_t_prev =  torch.where(t.long() == 0, torch.zeros_like(t),
+                                 self.sigma_min * (self.sigma_max / self.sigma_min) ** (t-1))
+
+
+
     # drift = torch.zeros_like(x)
-    drift = torch.zeros_like(x) + self.N * alpha_t[:,None,None,None] * (-1) * (self.c / self.lam)
+    # drift = torch.zeros_like(x) + self.N * alpha_t[:,None,None,None] * (-1) * (self.c / self.lam)
+    drift = torch.zeros_like(x) + ((-1) * self.c / self.lam) * (alpha_t - alpha_t_prev)[:,None,None,None]
     #
     # diffusion = sigma * torch.sqrt(torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min)),
     #                                             device=t.device))
@@ -316,7 +324,10 @@ class VESDE(SDE):
 
     # sigmas_cumprod = torch.cumprod(self.discrete_sigmas, dim=0)  # shape=[num_timesteps]
     # sigmas_cumprod = sigmas_cumprod.to(t.device)  # 确保同设备
-    shape_p = self.c * self.discrete_sigmas_cumprod.to(t.device)[t.long()]
+    # shape_p = self.c * self.discrete_sigmas_cumprod.to(t.device)[t.long()]
+    alpha_t = self.discrete_sigmas.to(t.device)[t.long()] ** 2
+
+    shape_p = self.c * alpha_t
 
     scale_p = self.lam
 

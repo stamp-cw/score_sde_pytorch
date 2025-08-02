@@ -106,7 +106,7 @@ def get_sde_loss_fn(sde, train, reduce_mean=True, continuous=True, likelihood_we
     if not likelihood_weighting:
       # losses = torch.square(score * std[:, None, None, None] + z)
       smld_sigma_array = torch.flip(sde.discrete_sigmas, dims=(0,))
-      alpha_t = smld_sigma_array.to(batch.device)[t.long()]
+      alpha_t = smld_sigma_array.to(batch.device)[t.long()] ** 2
       target = ((-1) * lam * (1 + lam * noise)) / (lam * noise + c * alpha_t[:,None,None,None])
       # losses = torch.square(score - target)
       losses = torch.square(raw_std[:, None, None, None] * (score - target))

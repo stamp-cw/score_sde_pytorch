@@ -185,16 +185,17 @@ class EulerMaruyamaPredictor(Predictor):
     # x_mean = x + drift * dt
     # x = x_mean + diffusion[:, None, None, None] * np.sqrt(-dt) * z
 
-    c=1000**2
+    c = 1000**2
 
     sigma_min = 0.01
     sigma_max = 50
     sigma = sigma_min * (sigma_max / sigma_min) ** t
-    alpha_t = sigma * torch.sqrt(torch.tensor(2 * (np.log(sigma_max) - np.log(sigma_min)),
-                                              device=t.device))
+    alpha_t = sigma ** 2
+    alpha_t_prev = torch.where(t.long() == 0, torch.zeros_like(t),
+                               self.sigma_min * (self.sigma_max / self.sigma_min) ** (t - 1))
 
-    dt = 1. / self.rsde.N
-    dGa = torch.distributions.Gamma(c * alpha_t , 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
+    dt = -1. / self.rsde.N
+    dGa = torch.distributions.Gamma(c * (alpha_t - alpha_t_prev) , 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
 
     drift, diffusion = self.rsde.sde(x, t)
     x_mean = x +  drift * dt
