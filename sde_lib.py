@@ -289,11 +289,14 @@ class VESDE(SDE):
   def sde(self, x, t):
     # 前向连续sde
     # sigma_t
-    # sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
+    sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
     # u_t
 
     # alpha_t
-    alpha_t = self.discrete_sigmas.to(t.device)[t.long()]
+
+    alpha_t = sigma * torch.sqrt(torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min)),
+                                                device=t.device))
+    # alpha_t = self.discrete_sigmas.to(t.device)[t.long()]
 
     # drift = torch.zeros_like(x)
     drift = torch.zeros_like(x) + self.N * alpha_t[:,None,None,None] * (-1) * (self.c / self.lam)

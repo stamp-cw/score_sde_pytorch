@@ -179,11 +179,27 @@ class EulerMaruyamaPredictor(Predictor):
     super().__init__(sde, score_fn, probability_flow)
 
   def update_fn(self, x, t):
-    dt = -1. / self.rsde.N
-    z = torch.randn_like(x)
+    # dt = -1. / self.rsde.N
+    # z = torch.randn_like(x)
+    # drift, diffusion = self.rsde.sde(x, t)
+    # x_mean = x + drift * dt
+    # x = x_mean + diffusion[:, None, None, None] * np.sqrt(-dt) * z
+
+    sigma_min = 0.01
+    sigma_max = 50
+    sigma = sigma_min * (sigma_max / sigma_min) ** t
+    alpha_t = sigma * torch.sqrt(torch.tensor(2 * (np.log(sigma_max) - np.log(sigma_min)),
+                                              device=t.device))
+
+    dt = 1. / self.rsde.N
+    dGa = torch.distributions.Gamma(c * alpha_t , 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
+
     drift, diffusion = self.rsde.sde(x, t)
-    x_mean = x + drift * dt
-    x = x_mean + diffusion[:, None, None, None] * np.sqrt(-dt) * z
+    x_mean = x +  drift * dt
+    x = x_mean + diffusion * dGa
+
+    # drift, diffusion = self.rsde.sde(x, t)
+
     return x, x_mean
 
 
