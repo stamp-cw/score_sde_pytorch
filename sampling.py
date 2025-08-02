@@ -185,6 +185,8 @@ class EulerMaruyamaPredictor(Predictor):
     # x_mean = x + drift * dt
     # x = x_mean + diffusion[:, None, None, None] * np.sqrt(-dt) * z
 
+    c=1000**2
+
     sigma_min = 0.01
     sigma_max = 50
     sigma = sigma_min * (sigma_max / sigma_min) ** t
