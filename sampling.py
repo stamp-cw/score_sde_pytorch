@@ -198,18 +198,32 @@ class ReverseDiffusionPredictor(Predictor):
     # x_mean = x - f
     # x = x_mean + G[:, None, None, None] * z
     f, G = self.rsde.discretize(x, t)
-    # z = torch.randn_like(x)
-    x_mean = x - f
+    # # z = torch.randn_like(x)
+    #
+    # x_mean = x - f * 1/1000
+    #
+    # sigma_min = 0.01
+    # sigma_max = 50
+    # sigma = sigma_min * (sigma_max / sigma_min) ** t
+    # c = 1000 ** 2
+    #
+    # dG = G * torch.distributions.Gamma(c * sigma * 1 / 1000, 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
+    # # print(f"G_shape:{G.shape}")
+    # # print(f"dG_shape:{dG.shape}")
+    # x = x_mean - dG
 
     sigma_min = 0.01
     sigma_max = 50
-    sigma = sigma_min * (sigma_max / sigma_min) ** t
-    c = 1000 ** 2
+    discrete_sigmas = torch.exp(torch.linspace(np.log(sigma_min), np.log(sigma_max), N))
+    alpha_t = discrete_sigmas.to(t.device)[t.long()]
 
-    dG = G * torch.distributions.Gamma(c * sigma * 1 / 1000, 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
-    # print(f"G_shape:{G.shape}")
-    # print(f"dG_shape:{dG.shape}")
-    x = x_mean - dG
+    N = 1000
+    delta_t = 1/N
+    delta_Ga = torch.distributions.Gamma(c * alpha_t , 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
+
+    x_mean = x + f * delta_t
+    x = x_mean + G * delta_Ga
+
 
     return x, x_mean
 

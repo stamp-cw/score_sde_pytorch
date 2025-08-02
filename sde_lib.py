@@ -65,15 +65,16 @@ class SDE(abc.ABC):
     dt = 1 / self.N
     drift, diffusion = self.sde(x, t)
     f = drift * dt
-    # G = diffusion * torch.sqrt(torch.tensor(dt, device=t.device))
-    # G(alpha*dt,1)
-    # sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
-    sigma_min = 0.01
-    sigma_max = 50
-    sigma = sigma_min * (sigma_max / sigma_min) ** t
-    c = 1000**2
-    G = diffusion * torch.distributions.Gamma(c * sigma * dt,1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
+    G = diffusion * torch.sqrt(torch.tensor(dt, device=t.device))
+    print("=================================")
 
+    ######################################################################
+    # sigma_min = 0.01
+    # sigma_max = 50
+    # sigma = sigma_min * (sigma_max / sigma_min) ** t
+    # c = 1000**2
+    # G = diffusion * torch.distributions.Gamma(c * sigma * dt,1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
+    #######################################################################
     return f, G
 
   def reverse(self, score_fn, probability_flow=False):
@@ -274,8 +275,9 @@ class VESDE(SDE):
     self.sigma_min = sigma_min
     self.sigma_max = sigma_max
     self.discrete_sigmas = torch.exp(torch.linspace(np.log(self.sigma_min), np.log(self.sigma_max), N))
-    self.N = N
+    self.discrete_sigmas_cumprod = torch.cumprod(self.discrete_sigmas, dim=0)
 
+    self.N = N
 
     self.lam = 1000
     self.c = self.lam ** 2
@@ -287,10 +289,14 @@ class VESDE(SDE):
   def sde(self, x, t):
     # 前向连续sde
     # sigma_t
-    sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
+    # sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
     # u_t
+
+    # alpha_t
+    alpha_t = self.discrete_sigmas.to(t.device)[t.long()]
+
     # drift = torch.zeros_like(x)
-    drift = torch.zeros_like(x) + self.N * sigma[:,None,None,None] * (-1) * (self.c / self.lam)
+    drift = torch.zeros_like(x) + self.N * alpha_t[:,None,None,None] * (-1) * (self.c / self.lam)
     #
     # diffusion = sigma * torch.sqrt(torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min)),
     #                                             device=t.device))
@@ -305,15 +311,15 @@ class VESDE(SDE):
 
     # mean =  self.c * torch.sum(self.discrete_sigmas[:t])
 
-    sigmas_cumprod = torch.cumprod(self.discrete_sigmas, dim=0)  # shape=[num_timesteps]
-    sigmas_cumprod = sigmas_cumprod.to(t.device)  # 确保同设备
-    mean = self.c * sigmas_cumprod[t.long()]
+    # sigmas_cumprod = torch.cumprod(self.discrete_sigmas, dim=0)  # shape=[num_timesteps]
+    # sigmas_cumprod = sigmas_cumprod.to(t.device)  # 确保同设备
+    shape_p = self.c * self.discrete_sigmas_cumprod.to(t.device)[t.long()]
 
-    std = self.lam
+    scale_p = self.lam
 
-    std2 = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
+    raw_std = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
 
-    return mean, std , std2
+    return shape_p, scale_p , raw_std
 
   def prior_sampling(self, shape):
     # p(t)
@@ -328,10 +334,13 @@ class VESDE(SDE):
     # 前向离散sde
     """SMLD(NCSN) discretization."""
     timestep = (t * (self.N - 1) / self.T).long()
-    sigma = self.discrete_sigmas.to(t.device)[timestep]
-    adjacent_sigma = torch.where(timestep == 0, torch.zeros_like(t),
-                                 self.discrete_sigmas.to(t.device)[timestep - 1].to(t.device))
-    f = torch.zeros_like(x) + sigma[:,None,None,None] * (-1) * (self.c / self.lam)
+    # sigma = self.discrete_sigmas.to(t.device)[timestep]
+    # adjacent_sigma = torch.where(timestep == 0, torch.zeros_like(t),
+    #                              self.discrete_sigmas.to(t.device)[timestep - 1].to(t.device))
+
+    alpha_t = self.discrete_sigmas.to(t.device)[timestep]
+
+    f = torch.zeros_like(x) + alpha_t[:,None,None,None] * (-1) * (self.c / self.lam)
     G = 1 / self.lam
     return f, G
 
@@ -366,11 +375,12 @@ class VESDE(SDE):
         # 反向连续sde
         """Create the drift and diffusion functions for the reverse SDE/ODE."""
         drift, diffusion = sde_fn(x, t)
-        # score = score_fn(x, t)
+        score = score_fn(x, t)
         # drift = drift - diffusion[:, None, None, None] ** 2 * score * (0.5 if self.probability_flow else 1.)
         drift = drift
         # Set the diffusion function to zero for ODEs.
-        diffusion = 0. if self.probability_flow else diffusion
+        # diffusion = 0. if self.probability_flow else diffusion
+        diffusion = 1 / ((1 / diffusion) +  score)
         return drift, diffusion
 
       def discretize(self, x, t):
@@ -379,9 +389,10 @@ class VESDE(SDE):
         f, G = discretize_fn(x, t)
         # rev_f = f - G[:, None, None, None] ** 2 * score_fn(x, t) * (0.5 if self.probability_flow else 1.)
         # rev_G = torch.zeros_like(G) if self.probability_flow else G
+        score = score_fn(x, t)
 
         rev_f = f
-        rev_G = 1/(self.lam +  score_fn(x, t))
+        rev_G =(-1) * (1/((1/G)+score))
 
         return rev_f, rev_G
 
