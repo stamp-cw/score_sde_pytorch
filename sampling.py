@@ -196,7 +196,7 @@ class EulerMaruyamaPredictor(Predictor):
 
     drift, diffusion = self.rsde.sde(x, t)
     x_mean = x +  drift * dt
-    x = x_mean + diffusion * dGa
+    x = x_mean - diffusion * dGa
 
     # drift, diffusion = self.rsde.sde(x, t)
 
@@ -239,7 +239,7 @@ class ReverseDiffusionPredictor(Predictor):
     delta_Ga = torch.distributions.Gamma(c * alpha_t , 1).sample(x.shape[1:]).permute(-1, 0, 1, 2).to(x.device)
 
     x_mean = x + f * delta_t
-    x = x_mean + G * delta_Ga
+    x = x_mean - G * delta_Ga
 
 
     return x, x_mean

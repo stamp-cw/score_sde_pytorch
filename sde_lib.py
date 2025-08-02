@@ -395,7 +395,7 @@ class VESDE(SDE):
         score = score_fn(x, t)
 
         rev_f = f
-        rev_G =(-1) * (1/((1/G)+score))
+        rev_G = 1/((1/G)+score)
 
         return rev_f, rev_G
 
